@@ -13,6 +13,7 @@ import yaml
 
 @dataclass
 class Template:
+    name: str
     template_dir: Path
     files_to_format: List[Path]
 
@@ -32,18 +33,29 @@ class TemplateDoesNotExist(TemError):
         super().__init__(f'No such template: {template_name}')
 
 
-def find_template(template_name: str, search_path: Path) -> Path:
+class TemdirDoesNotExist(TemError):
+    def __init__(self) -> None:
+        super().__init__('`TEMplates` directory does not exist on the current or any upper level')
+
+
+def find_temdir(search_path: Path) -> Path:
     search_path = search_path.resolve()
     temdir_path = search_path / 'TEMplates'
 
-    if not temdir_path.is_dir():
-        # No `TEMplates` dir on the current level
-        if search_path == Path('/'):
-            # We've looked for `TEMplates` at the highest possible level
-            raise TemplateDoesNotExist(template_name)
-        return find_template(template_name, search_path / '..')
+    if temdir_path.is_dir():
+        return temdir_path
 
-    # `TEMplates` dir found
+    # No `TEMplates` dir on the current level
+    if search_path == Path('/'):
+        # We've looked for `TEMplates` at the highest possible level
+        raise TemdirDoesNotExist()
+    return find_temdir(search_path / '..')
+
+
+
+def find_template(template_name: str, search_path: Path) -> Path:
+    temdir_path = find_temdir(search_path)
+
     template_path = temdir_path / template_name
     if template_path.is_dir():
         return template_path
@@ -65,7 +77,11 @@ def read_template(path: Path) -> 'Template':
             raise InvalidTemplateError('Each member of `format` property must be a string')
         files_to_format.append(Path(filename))
 
-    return Template(template_dir=path, files_to_format=files_to_format)
+    return Template(
+        name = path.name,
+        template_dir = path,
+        files_to_format = files_to_format,
+    )
 
 
 def copy_template_files(template_dir: Path, destination: Path) -> None:
@@ -113,11 +129,20 @@ class UseCommand(Command):
             format_file(filepath, self.arguments)
 
 
+class ListCommand(Command):
+    def run(self) -> None:
+        temdir_path = find_temdir(Path('.'))
+        for template_path in temdir_path.iterdir():
+            template = read_template(template_path)
+            print(template.name)
+
+
 class HelpCommand(Command):
     def run(self) -> None:
         print('Usage: tem <command> [args...]')
         print('Available commands with their accepted options:')
         print('    use <template> [key1=value1 [...]]   -- Use a template')
+        print('    list                                 -- List available templates')
         print('    help                                 -- Display this help message')
 
 
@@ -166,6 +191,8 @@ def parse_command(cmdline_args: List[str]) -> Command:
     del argv0
     if command == 'use':
         return parse_use_command(args)
+    if command == 'list':
+        return ListCommand()
     if command == 'help':
         return HelpCommand()
     raise UsageError(f'Invalid command: `{command}`', offer_help=True)
