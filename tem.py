@@ -6,7 +6,7 @@ import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import yaml
 
@@ -16,6 +16,7 @@ class Template:
     name: str
     template_dir: Path
     files_to_format: List[Path]
+    description: Optional[str]
 
 
 class Command:
@@ -84,10 +85,15 @@ def read_template(path: Path) -> 'Template':
             raise InvalidTemplateError('Each member of `format` property must be a string')
         files_to_format.append(Path(filename))
 
+    description = template_data.get('description', None)
+    if description is not None and not isinstance(description, str):
+        raise InvalidTemplateError('Description must be either null or a string')
+
     return Template(
         name = path.name,
         template_dir = path,
         files_to_format = files_to_format,
+        description = description,
     )
 
 
@@ -139,9 +145,14 @@ class UseCommand(Command):
 class ListCommand(Command):
     def run(self) -> None:
         temdir_path = find_temdir(Path('.'))
-        for template_path in temdir_path.iterdir():
-            template = read_template(template_path)
-            print(template.name)
+        templates = [read_template(path) for path in temdir_path.iterdir()]
+        max_name_length = max(len(t.name) for t in templates)
+        pad_length = max_name_length + 4
+        for t in templates:
+            name_length = len(t.name)
+            whitespace_length = pad_length - name_length
+            desc = '(no description available)' if t.description is None else t.description
+            print(t.name + ' ' * whitespace_length + desc)
 
 
 class HelpCommand(Command):
