@@ -2,10 +2,13 @@
 
 import re
 import sys
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict
 from abc import abstractmethod
+
+import yaml
 
 
 @dataclass
@@ -19,6 +22,66 @@ class Command:
         ...
 
 
+class TemError(Exception):
+    pass
+
+
+class TemplateDoesNotExist(TemError):
+    def __init__(self, template_name: str) -> None:
+        super().__init__(f'No such template: {template_name}')
+
+
+def find_template(template_name: str, search_path: Path) -> Path:
+    search_path = search_path.resolve()
+    temdir_path = search_path / 'TEMplates'
+
+    if not temdir_path.is_dir():
+        # No `TEMplates` dir on the current level
+        if search_path == Path('/'):
+            # We've looked for `TEMplates` at the highest possible level
+            raise TemplateDoesNotExist(template_name)
+        return find_template(template_name, search_path / '..')
+
+    # `TEMplates` dir found
+    template_path = temdir_path / template_name
+    if template_path.is_dir():
+        return template_path
+    raise TemplateDoesNotExist(template_name)
+
+
+def read_template(path: Path) -> 'Template':
+    temfile_path = path / 'Temfile.yml'
+    with temfile_path.open() as f:
+        template_data = yaml.safe_load(f)
+
+    # TODO: obtain the necessary parameters from `template_data`
+    # (it is currently unused)
+
+    return Template(template_dir=path)
+
+
+def copy_template_files(template_dir: Path, destination: Path) -> None:
+    # Files not to copy
+    excluded_files = {'Temfile.yml'}
+
+    # TODO: Maybe scan the destination directory for existence of files/dirs
+    # to be copied before any copying is actually done. This will ensure that
+    # failed (for this reason) copying does not break template's consistency
+
+    for filepath in template_dir.iterdir():
+        if filepath.name in excluded_files:
+            continue
+        if filepath.is_dir():
+            shutil.copytree(
+                filepath,
+                destination / filepath.name,
+                symlinks = True,
+                ignore_dangling_symlinks = True,
+            )
+        else:
+            shutil.copy(filepath, destination, follow_symlinks=False)
+
+
 class UseCommand(Command):
     def __init__(self, template_name: str, arguments: Dict[str, str]) -> None:
         self.template_name = template_name
@@ -26,8 +89,9 @@ class UseCommand(Command):
 
 
     def run(self) -> None:
-        # TODO: write the actual code
-        ...
+        template_path = find_template(self.template_name, Path('.'))
+        template = read_template(template_path)
+        copy_template_files(template.template_dir, Path('.'))
 
 
 class HelpCommand(Command):
@@ -38,7 +102,7 @@ class HelpCommand(Command):
         print('    help                                 -- Display this help message')
 
 
-class UsageError(Exception):
+class UsageError(TemError):
     def __init__(self, message: str, offer_help: bool = False) -> None:
         self.message = message
         self.offer_help = offer_help
@@ -90,13 +154,11 @@ def parse_command(cmdline_args: List[str]) -> Command:
 
 def main():
     try:
-       command = parse_command(sys.argv)
-    except UsageError as e:
+        command = parse_command(sys.argv)
+        command.run()
+    except TemError as e:
         print('Error:', e, file=sys.stderr)
         sys.exit(1)
-
-    command.run()
-
 
 if __name__ == '__main__':
     main()
