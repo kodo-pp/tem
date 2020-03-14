@@ -55,6 +55,11 @@ def parse_use_command(args: List[str]) -> UseCommand:
         raise UsageError('Template name must be specified')
 
     template_name, *raw_kv_pairs = args
+
+    for char in ['/', '\\', '\x00']:
+        if char in template_name:
+            raise UsageError(f'Invalid template name: `{template_name}`')
+
     key_value_args: Dict[str, str] = {}
     for raw_kv_pair in raw_kv_pairs:
         # raw_kv_pair represents a single command line argument that should
