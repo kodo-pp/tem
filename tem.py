@@ -14,6 +14,7 @@ import yaml
 @dataclass
 class Template:
     template_dir: Path
+    files_to_format: List[Path]
 
 
 class Command:
@@ -54,10 +55,17 @@ def read_template(path: Path) -> 'Template':
     with temfile_path.open() as f:
         template_data = yaml.safe_load(f)
 
-    # TODO: obtain the necessary parameters from `template_data`
-    # (it is currently unused)
+    filenames_to_format = template_data.get('format', [])
+    if not isinstance(filenames_to_format, list):
+        raise InvalidTemplateError('`format` property must be a list')
 
-    return Template(template_dir=path)
+    files_to_format: List[Path] = []
+    for filename in filenames_to_format:
+        if not isinstance(filename, str):
+            raise InvalidTemplateError('Each member of `format` property must be a string')
+        files_to_format.append(Path(filename))
+
+    return Template(template_dir=path, files_to_format=files_to_format)
 
 
 def copy_template_files(template_dir: Path, destination: Path) -> None:
@@ -82,6 +90,15 @@ def copy_template_files(template_dir: Path, destination: Path) -> None:
             shutil.copy(filepath, destination, follow_symlinks=False)
 
 
+def format_file(filepath: Path, arguments: Dict[str, str]) -> None:
+    data = filepath.read_text()
+    for key, value in arguments.items():
+        replaced_string = f'@@tem:{key}@@'
+        replacement = value
+        data = data.replace(replaced_string, replacement)
+    filepath.write_text(data)
+
+
 class UseCommand(Command):
     def __init__(self, template_name: str, arguments: Dict[str, str]) -> None:
         self.template_name = template_name
@@ -92,6 +109,8 @@ class UseCommand(Command):
         template_path = find_template(self.template_name, Path('.'))
         template = read_template(template_path)
         copy_template_files(template.template_dir, Path('.'))
+        for filepath in template.files_to_format:
+            format_file(filepath, self.arguments)
 
 
 class HelpCommand(Command):
