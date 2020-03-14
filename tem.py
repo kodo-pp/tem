@@ -50,8 +50,20 @@ class UsageError(Exception):
 
 
 def parse_use_command(args: List[str]) -> UseCommand:
-    # TODO: write the actual code
-    raise NotImplementedError()
+    if len(args) < 1:
+        raise UsageError('Template name must be specified')
+
+    template_name, *raw_kv_pairs = args
+    key_value_args: Dict[str, str] = {}
+    for raw_kv_pair in raw_kv_pairs:
+        # raw_kv_pair represents a single command line argument that should
+        # have the form `key=value`. If it is not so, raise an exception
+        key, separator, value = raw_kv_pair.partition('=')
+        if separator == '':
+            raise UsageError('Template arguments must be `key=value` pairs')
+        key_value_args[key] = value   # TODO: maybe check for duplicate keys
+    return UseCommand(template_name=template_name, arguments=key_value_args)
+
 
 
 def parse_command(cmdline_args: List[str]) -> Command:
@@ -70,7 +82,7 @@ def main():
     try:
        command = parse_command(sys.argv)
     except UsageError as e:
-        print(e, file=sys.stderr)
+        print('Error:', e, file=sys.stderr)
         sys.exit(1)
 
     command.run()
