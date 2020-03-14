@@ -38,6 +38,10 @@ class TemdirDoesNotExist(TemError):
         super().__init__('`TEMplates` directory does not exist on the current or any upper level')
 
 
+class InvalidTemplateError(TemError):
+    pass
+
+
 def find_temdir(search_path: Path) -> Path:
     search_path = search_path.resolve()
     temdir_path = search_path / 'TEMplates'
@@ -66,6 +70,9 @@ def read_template(path: Path) -> 'Template':
     temfile_path = path / 'Temfile.yml'
     with temfile_path.open() as f:
         template_data = yaml.safe_load(f)
+
+    if not isinstance(template_data, dict):
+        raise InvalidTemplateError('Root element must be a dict')
 
     filenames_to_format = template_data.get('format', [])
     if not isinstance(filenames_to_format, list):
