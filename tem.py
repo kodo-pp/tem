@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +62,10 @@ def parse_use_command(args: List[str]) -> UseCommand:
         key, separator, value = raw_kv_pair.partition('=')
         if separator == '':
             raise UsageError('Template arguments must be `key=value` pairs')
+
+        if re.fullmatch(r'[a-zA-Z0-9_-]+', key) is None:
+            raise UsageError(f'Invalid key `{key}`')
+
         key_value_args[key] = value   # TODO: maybe check for duplicate keys
     return UseCommand(template_name=template_name, arguments=key_value_args)
 
